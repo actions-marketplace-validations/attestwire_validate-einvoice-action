@@ -10,15 +10,57 @@ banking documentation.
 | `xrechnung-ubl-minimal.xml` | `@attestwire/en16931` fixtures | the clean-pass case, UBL |
 | `xrechnung-cii-minimal.xml` | `@attestwire/en16931` fixtures | syntax detection routes to the CII reader |
 | `xrechnung-ubl-credit-note.xml` | `@attestwire/en16931` fixtures | a credit note is a document, not a refusal |
-| `xrechnung-ubl-missing-buyer-reference.xml` | derived: `xrechnung-ubl-minimal.xml` with `cbc:BuyerReference` removed | the failing case — BR-DE-15, exit code 1, SARIF shape |
+| `xrechnung-ubl-missing-buyer-reference.xml` | derived: `xrechnung-ubl-minimal.xml` with `cbc:BuyerReference` removed | the failing case — BR-DE-15, exit code 1, SARIF shape, line 2 |
+| `xrechnung-cii-missing-buyer-reference.xml` | derived: `xrechnung-cii-minimal.xml` with `ram:BuyerReference` removed | a CII finding gets a CII path and line 72, not a UBL path |
 | `not-an-invoice.xml` | hand-written | well-formed XML that is not an invoice must fail, not skip |
 | `facturx-en16931-einfach.pdf` | FeRD `ZUGFeRD_2.5.2_DE_examples.zip`, `3. EN16931/E05_Einfach/E05_01_Einfach_fx.pdf`, retrieved 2026-08-14 | the PDF container is unwrapped and its CII payload validated |
+| `facturx-minimum-rechnung.pdf` | FeRD `ZUGFeRD_2.5.2_DE_examples.zip`, `0. MINIMUM/MINIMUM_Rechnung/MINIMUM_Rechnung_fx.pdf`, retrieved 2026-08-14 | a MINIMUM file is `AW-PROFILE-SUBSET` plus the rules it cannot meet; its lines are its attachment's |
 
-The PDF is a real file from a conformant producer, on purpose. A hand-built PDF
-can only test the extractor against its author's understanding of the format.
-Its attachment is named `factur-x.xml` and its cross-reference table is an xref
+The PDFs are real files from a conformant producer, on purpose. A hand-built
+PDF can only test the extractor against its author's understanding of the
+format. Both attach the XML as `factur-x.xml`. The EN16931 one has an xref
 **stream** with the file specification inside a compressed object stream — the
-case a naive extractor gets wrong.
+case a naive extractor gets wrong; the MINIMUM one has a classic xref table.
+Both are also in the engine's own fixtures, `fixtures/facturx/` in
+[attestwire/en16931](https://github.com/attestwire/en16931).
 
-`sha256` of the PDF:
-`a0978983423b7261cea82ed4bea1e7b3062c87521692be83ad52ed27caeb6612`
+`sha256`:
+
+- `facturx-en16931-einfach.pdf`: `a0978983423b7261cea82ed4bea1e7b3062c87521692be83ad52ed27caeb6612`
+- `facturx-minimum-rechnung.pdf`: `4d331416500719b338d8f969c8a414c396adce37e21273efdbf59c6a41920712`
+
+## `encodings/`
+
+Two of the invoices above, in encodings other than UTF-8. They sit in their own
+directory so the `test/fixtures/*.xml` globs in `run.test.js` and in the CI
+self-test match the same files as before, and `.gitattributes` marks them
+binary: their bytes are the test, and no checkout may normalise them.
+
+| File | Origin | Used for |
+| --- | --- | --- |
+| `xrechnung-ubl-iso-8859-1.xml` | derived: `xrechnung-ubl-minimal.xml` saved as ISO-8859-1 under `encoding="ISO-8859-1"`, with the seller's email address written with a display name, `Jürgen Weiß <rechnungen@musterlieferant.example>` | read in the encoding it declares: BR-DE-28 quotes the address back, so a test can see the `ü` and the `ß` the rules saw, where decoding as UTF-8 gives U+FFFD. Also attached to a hand-built PDF, for the attachment that is not UTF-8 |
+| `xrechnung-cii-utf-16.xml` | derived: `xrechnung-cii-minimal.xml` saved as UTF-16LE with a byte-order mark under `encoding="UTF-16"` | UTF-16 is read and passes, not refused as malformed |
+
+That hand-built PDF is `pdfWithAttachment` in `test/helpers.js`, made at test
+time. No producer's sample attaches XML in anything but UTF-8, and the question
+there is what happens to the attachment's bytes once it is found, not whether
+the reader can find it.
+
+`sha256`:
+
+- `encodings/xrechnung-ubl-iso-8859-1.xml`: `a5a59e8963c17d8057539235480f4a1cc2c77b18627c36f6dc75170c3be851dd`
+- `encodings/xrechnung-cii-utf-16.xml`: `5a780588aea0a55754e7ea44fcec48d984e1a274df45a4bd5f61ae87c7bc0931`
+
+## `sarif-schema-2.1.0.json`
+
+Not an invoice: the SARIF 2.1.0 JSON schema, which `test/sarif-check.js`
+validates the action's SARIF against, so a report GitHub would refuse fails the
+suite rather than a customer's upload.
+
+- Source: <https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/sarif-2.1/schema/sarif-schema-2.1.0.json>,
+  the same file the engine's export tests use
+- sha256: `c3b4bb2d6093897483348925aaa73af03b3e3f4bd4ca38cef26dcb4212a2682e`
+- Schema `id`: `https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json`
+- `github/codeql-action/upload-sarif` validates against its own copy of this
+  schema, which differs only in carrying the region's `anyOf` as a property
+  (disabling that one check), so passing this is at least as strict.
